@@ -12,6 +12,7 @@ pub mod copilot;
 pub mod fork;
 pub mod grok;
 mod json_hooks;
+pub mod kiro;
 pub mod mcp;
 pub mod note;
 pub mod opencode;
@@ -25,6 +26,7 @@ use ccode::Ccode;
 use codex::Codex;
 use copilot::Copilot;
 use grok::Grok;
+use kiro::Kiro;
 use opencode::Opencode;
 use pi::Pi;
 use rehydrate::{RehydrateError, RehydrateSession};
@@ -45,6 +47,14 @@ pub trait Harness: std::fmt::Debug {
     /// There is a default implementation -- the empty set.
     fn alias_names(&self) -> &'static [&'static str] {
         &[]
+    }
+
+    /// Whether atuin writes this harness's transcripts: restoring a session here
+    /// ([`Self::rehydrate`]), catching a copy up or switching its branch (`SessionSync`), and
+    /// forking or continuing a session into it. A harness atuin only reads (Kiro, until its write
+    /// side lands) says no, and every writer refuses it up front.
+    fn writes_transcripts(&self) -> bool {
+        true
     }
 
     /// Install this harness's hooks on the current user's machine, returning the path written.
@@ -91,6 +101,7 @@ pub enum AnyHarness {
     Codex(Codex),
     Copilot(Copilot),
     Grok(Grok),
+    Kiro(Kiro),
     Opencode(Opencode),
     Pi(Pi),
 }
@@ -159,6 +170,7 @@ impl AnyHarness {
             Self::Codex(Codex),
             Self::Copilot(Copilot),
             Self::Grok(Grok),
+            Self::Kiro(Kiro),
             Self::Opencode(Opencode),
             Self::Pi(Pi::PI),
             Self::Pi(Pi::OMP),
@@ -173,6 +185,7 @@ impl AnyHarness {
             Self::Codex(h) => Some(h.sessions(pool.clone()).into()),
             Self::Copilot(h) => Some(h.sessions(pool.clone()).into()),
             Self::Grok(h) => Some(h.sessions(pool.clone()).into()),
+            Self::Kiro(h) => Some(h.sessions(pool.clone()).into()),
             Self::Opencode(h) => Some(h.sessions(pool.clone()).into()),
             Self::Pi(h) => Some(h.sessions(pool.clone()).into()),
         }

@@ -37,6 +37,7 @@ mod ccode;
 mod codex;
 mod copilot;
 mod grok;
+mod kiro;
 pub mod liveness;
 mod opencode;
 mod pi;
@@ -278,6 +279,7 @@ impl SessionSync for AnyHarness {
             Self::Codex(h) => h.local_tip(id).await,
             Self::Copilot(h) => h.local_tip(id).await,
             Self::Grok(h) => h.local_tip(id).await,
+            Self::Kiro(h) => h.local_tip(id).await,
             Self::Opencode(h) => h.local_tip(id).await,
             Self::Pi(h) => h.local_tip(id).await,
         }
@@ -289,6 +291,7 @@ impl SessionSync for AnyHarness {
             Self::Codex(h) => h.is_live(id, cwd).await,
             Self::Copilot(h) => h.is_live(id, cwd).await,
             Self::Grok(h) => h.is_live(id, cwd).await,
+            Self::Kiro(h) => h.is_live(id, cwd).await,
             Self::Opencode(h) => h.is_live(id, cwd).await,
             Self::Pi(h) => h.is_live(id, cwd).await,
         }
@@ -306,6 +309,7 @@ impl SessionSync for AnyHarness {
             Self::Codex(h) => h.append(id, base, lines, options).await,
             Self::Copilot(h) => h.append(id, base, lines, options).await,
             Self::Grok(h) => h.append(id, base, lines, options).await,
+            Self::Kiro(h) => h.append(id, base, lines, options).await,
             Self::Opencode(h) => h.append(id, base, lines, options).await,
             Self::Pi(h) => h.append(id, base, lines, options).await,
         }
@@ -324,6 +328,7 @@ impl SessionSync for AnyHarness {
             Self::Codex(h) => h.replace(id, base, branch, options, backups).await,
             Self::Copilot(h) => h.replace(id, base, branch, options, backups).await,
             Self::Grok(h) => h.replace(id, base, branch, options, backups).await,
+            Self::Kiro(h) => h.replace(id, base, branch, options, backups).await,
             Self::Opencode(h) => h.replace(id, base, branch, options, backups).await,
             Self::Pi(h) => h.replace(id, base, branch, options, backups).await,
         }

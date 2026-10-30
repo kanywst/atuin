@@ -7,7 +7,7 @@ use std::process::Stdio;
 use serde_json::{Value, json};
 
 use super::pi::Flavour;
-use super::{AnyHarness, codex, copilot, grok, opencode};
+use super::{AnyHarness, codex, copilot, grok, kiro, opencode};
 use crate::dirs::home_dir;
 use crate::env::var_nonempty;
 use crate::path::{AbsPathBuf, PathBufExt as _};
@@ -62,6 +62,7 @@ fn config_path(harness: AnyHarness) -> PathBuf {
         AnyHarness::Codex(_) => codex::home().joined("config.toml"),
         AnyHarness::Copilot(_) => copilot::copilot_home().joined("mcp-config.json"),
         AnyHarness::Grok(_) => grok::home().joined("config.toml"),
+        AnyHarness::Kiro(_) => kiro::kiro_home().joined("settings").joined("mcp.json"),
         AnyHarness::Opencode(_) => opencode::config_dir().joined("opencode.json"),
         AnyHarness::Pi(pi) => pi.flavour().agent_dir().joined("mcp.json"),
     }
@@ -91,6 +92,11 @@ pub async fn install(harness: AnyHarness) -> Result<(), InstallMcpError> {
             run("copilot", &["mcp", "add", "atuin", "--", atuin, "mcp"]).await
         }
         AnyHarness::Grok(_) => run("grok", &["mcp", "add", "atuin", "--", atuin, "mcp"]).await,
+        // Not `kiro-cli mcp add`: the binary's name differs per platform, and the file is plain.
+        AnyHarness::Kiro(_) => {
+            let server = json!({"command": atuin, "args": ["mcp"], "env": {}});
+            add_to_config(&config_path(harness), json!({}), "mcpServers", server).await
+        }
         // Not `opencode mcp add`: 1.x's only prompts, and 2.0's writes `mcp.servers`, which 2.0
         // doesn't load. Both load `mcp.<name>`.
         AnyHarness::Opencode(_) => install_opencode(&config_path(harness), atuin).await,
@@ -226,6 +232,7 @@ mod tests {
     #[case("codex", ".codex/config.toml")]
     #[case("copilot", ".copilot/mcp-config.json")]
     #[case("grok", ".grok/config.toml")]
+    #[case("kiro", ".kiro/settings/mcp.json")]
     #[case("opencode", ".config/opencode/opencode.json")]
     #[case("pi", ".pi/agent/mcp.json")]
     #[case("omp", ".omp/agent/mcp.json")]
@@ -251,6 +258,7 @@ mod tests {
     #[case("codex", "CODEX_HOME", "config.toml")]
     #[case("copilot", "COPILOT_HOME", "mcp-config.json")]
     #[case("grok", "GROK_HOME", "config.toml")]
+    #[case("kiro", "KIRO_HOME", "settings/mcp.json")]
     #[case("opencode", "XDG_CONFIG_HOME", "opencode/opencode.json")]
     #[case("pi", "PI_CODING_AGENT_DIR", "mcp.json")]
     #[case("omp", "PI_CODING_AGENT_DIR", "mcp.json")]
