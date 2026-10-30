@@ -26,6 +26,7 @@ pub enum HarnessKind {
     Pi = 5,
     Omp = 6,
     Grok = 7,
+    Kiro = 8,
 }
 
 impl From<&AnyHarness> for HarnessKind {
@@ -35,6 +36,7 @@ impl From<&AnyHarness> for HarnessKind {
             AnyHarness::Codex(_) => Self::Codex,
             AnyHarness::Copilot(_) => Self::Copilot,
             AnyHarness::Grok(_) => Self::Grok,
+            AnyHarness::Kiro(_) => Self::Kiro,
             AnyHarness::Opencode(_) => Self::Opencode,
             AnyHarness::Pi(pi) => match pi.flavour() {
                 Flavour::Pi => Self::Pi,
@@ -49,12 +51,13 @@ impl HarnessKind {
     /// known harness), whose sessions can be viewed but not resumed.
     #[must_use]
     pub fn harness(self) -> Option<AnyHarness> {
-        use atuin_common::harnesstools::{ccode, codex, copilot, grok, opencode, pi};
+        use atuin_common::harnesstools::{ccode, codex, copilot, grok, kiro, opencode, pi};
         match self {
             Self::ClaudeCode => Some(AnyHarness::ClaudeCode(ccode::Ccode)),
             Self::Codex => Some(AnyHarness::Codex(codex::Codex)),
             Self::Copilot => Some(AnyHarness::Copilot(copilot::Copilot)),
             Self::Grok => Some(AnyHarness::Grok(grok::Grok)),
+            Self::Kiro => Some(AnyHarness::Kiro(kiro::Kiro)),
             Self::Opencode => Some(AnyHarness::Opencode(opencode::Opencode)),
             Self::Pi => Some(AnyHarness::Pi(pi::Pi::PI)),
             Self::Omp => Some(AnyHarness::Pi(pi::Pi::OMP)),
@@ -594,6 +597,7 @@ mod tests {
     #[case::opencode(HarnessKind::Opencode, true)]
     #[case::pi(HarnessKind::Pi, true)]
     #[case::copilot(HarnessKind::Copilot, true)]
+    #[case::kiro(HarnessKind::Kiro, true)]
     #[case::unknown(HarnessKind::Unknown, false)]
     fn a_kind_has_harness_tools_only_when_atuin_knows_the_harness(
         #[case] kind: HarnessKind,
@@ -655,8 +659,8 @@ mod tests {
         assert!(matches!(err, DecodeError::Retired(RecordVersion::V0)));
     }
 
-    /// A message v2 readers can't decode (naming omp, or with a provider) is written as v3, and
-    /// reads back.
+    /// A message older readers can't decode (naming omp, grok or kiro, or with a provider) is
+    /// written as the first version that can, and reads back.
     #[rstest]
     #[case::pi(HarnessKind::Pi, None, None, RecordVersion::V2)]
     #[case::omp(HarnessKind::Omp, None, None, RecordVersion::V3)]
@@ -689,7 +693,7 @@ mod tests {
     #[rstest]
     fn an_unknown_version_is_refused() {
         let record = AiSessionRecord::Message(record_message()).serialize();
-        let version = RecordVersion::Other("v5".to_owned());
+        let version = RecordVersion::Other("v6".to_owned());
         let err = AiSessionRecord::deserialize(&record, &version).unwrap_err();
         assert!(matches!(err, DecodeError::UnknownVersion(v) if v == version));
     }
