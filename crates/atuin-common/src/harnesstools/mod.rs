@@ -12,6 +12,7 @@ pub mod copilot;
 pub mod fork;
 pub mod grok;
 mod json_hooks;
+pub mod kiro;
 pub mod mcp;
 pub mod note;
 pub mod opencode;
