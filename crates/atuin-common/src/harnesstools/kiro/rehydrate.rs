@@ -31,6 +31,12 @@
 //! - **A tool call under a foreign name** (Claude Code's `Read`, with its own `args`) was read
 //!   like any other; so was a turn with no prompt (`turn_start` right after a `turn_end`, as an
 //!   append of a turn's tail writes), and an `error` row.
+//! - **Kiro's own tools, carried in** (Kiro 2.37.1): a Claude Code session continued into Kiro by
+//!   this writer, its `Write`, `Edit` (`replace_all`) and `Grep` (`-i`, a glob) written as
+//!   `fs_write`, `str_replace` and `grep_search` and a failed `Bash` as a `failed`
+//!   `execute_bash`, resumed headless: the model quoted each call's name, arguments and result
+//!   verbatim, and the shell call as failed with exit code 1. It listed the calls, a run of
+//!   call and result pairs in one turn as Kiro writes them itself, last first.
 //! - **The header is rewritten whole** after a turn, keeping `title`, `parentSessionId`,
 //!   `forkedAtMessageId` and `_meta.kiro.atuin` as written and adding Kiro's defaults; a title
 //!   written there is kept, not generated over. A row's extra field (`atuinMerged`) is ignored.
