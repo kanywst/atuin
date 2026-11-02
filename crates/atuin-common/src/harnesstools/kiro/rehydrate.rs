@@ -17,8 +17,10 @@
 //!   `run_command_` prefix and no `modelToolUseId`.
 //! - **A `tool_call` needs `status`.** Without one Kiro dropped the call and its result from
 //!   the model's context (the model then denied ever running the command); with `completed`
-//!   it kept them, `kind` or no `kind`. A failed result is `success: false` under a `completed`
-//!   call, as a hand-written one read back.
+//!   it kept them, `kind` or no `kind`. A call whose result is an error is written `failed`, as
+//!   Kiro writes one itself: on Kiro 2.37.1 the model kept a failed call in context under
+//!   `failed` and under `completed` with `success: false` alike, quoting the error and exit
+//!   code from each.
 //! - **`agent_note` is read by the model**, so a continuation's marker goes there: Kiro gives
 //!   the model the note's text as context, as it does its own `<session_context>` block, and
 //!   the model quoted the marker's first line back verbatim. The reader yields it as a system
@@ -94,7 +96,7 @@ use crate::harnesstools::rehydrate::{
     record_merged,
 };
 use crate::harnesstools::resume;
-use crate::harnesstools::session::{Content, Role, StopReason, ToolResult, ToolUse};
+use crate::harnesstools::session::{Content, Role, StopReason, ToolCallId, ToolResult, ToolUse};
 use crate::path::PathBufExt as _;
 
 /// The header's `schemaVersion`, the one Kiro CLI 2.36.0 writes and the only one it opens.
@@ -117,9 +119,10 @@ pub(crate) fn default_agent(home: &Path) -> String {
         .unwrap_or_else(|| AGENT_MODE.to_owned())
 }
 
-/// The `status` a written `tool_call` carries: the one Kiro keeps the call under when it
-/// replays the log (see the module docs).
+/// The `status` a written `tool_call` carries (see the module docs): Kiro's own for a call
+/// whose result is an error, else the one for a call that ran.
 const CALL_STATUS: &str = "completed";
+const FAILED_STATUS: &str = "failed";
 
 /// What Kiro writes for the model's reasoning when it can't be shown, and the reader reads as a
 /// marker that the model reasoned.
@@ -264,7 +267,15 @@ pub(crate) fn timestamp(at: OffsetDateTime) -> String {
 /// [`MERGED_FIELD`]: crate::harnesstools::rehydrate::MERGED_FIELD
 pub(crate) fn lines(session: &RehydrateSession, current: Option<&[u8]>) -> Vec<Value> {
     let (messages, hosts) = merge_uncaptured_runs(&session.messages);
-    let mut writer = Writer::new(current);
+    let failed = messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .filter_map(|c| match c {
+            Content::ToolResult(r) if r.error => Some(r.call.clone()),
+            _ => None,
+        })
+        .collect();
+    let mut writer = Writer::new(current, failed);
     for message in &messages {
         writer.push(message);
     }
@@ -299,10 +310,12 @@ struct Writer {
     executions: HashSet<String>,
     /// The rows written as no row, each with the row it went into.
     merged: Vec<(String, String)>,
+    /// The calls whose result is an error.
+    failed: HashSet<ToolCallId>,
 }
 
 impl Writer {
-    fn new(current: Option<&[u8]>) -> Self {
+    fn new(current: Option<&[u8]>, failed: HashSet<ToolCallId>) -> Self {
         let mut first = None;
         let mut count = 0;
         let mut executions = HashSet::new();
@@ -326,6 +339,7 @@ impl Writer {
             turn: None,
             executions,
             merged: Vec::new(),
+            failed,
         }
     }
 
@@ -503,7 +517,7 @@ impl Writer {
                 "toolCallId": call.id,
                 "toolName": call.name,
                 "args": args,
-                "status": CALL_STATUS,
+                "status": if self.failed.contains(&call.id) { FAILED_STATUS } else { CALL_STATUS },
             });
             extend(&mut row, &in_turn);
             self.row(id(call.id.as_ref()), m.timestamp, row);

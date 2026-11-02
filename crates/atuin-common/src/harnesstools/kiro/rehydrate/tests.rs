@@ -441,7 +441,8 @@ async fn uncaptured_calls_become_notes(home: TempDir) {
 
 /// A Claude Code reply of text and several calls is a `Say` under the row's id and a
 /// `tool_call` each, a row of several results a `tool_result` each: all in one turn, framed by
-/// its start and end, each call carrying the status Kiro replays it under.
+/// its start and end, each call carrying the status Kiro gives it: `failed` for one whose
+/// result is an error.
 #[rstest]
 #[tokio::test]
 async fn a_row_of_text_and_calls_is_a_say_and_a_call_each(home: TempDir) {
@@ -491,6 +492,7 @@ async fn a_row_of_text_and_calls_is_a_say_and_a_call_each(home: TempDir) {
     assert_eq!(kinds.len(), 10, "{kinds:?}");
     let lines = lines_of(&path);
     assert_eq!(lines[3]["payload"]["status"], CALL_STATUS);
+    assert_eq!(lines[4]["payload"]["status"], FAILED_STATUS);
     assert_eq!(lines[3]["payload"]["executionId"], "msg_01");
     assert_eq!(lines[6]["payload"]["success"], false);
     assert_eq!(lines[8]["payload"]["stopReason"], "end_turn");
@@ -521,6 +523,23 @@ async fn a_row_of_text_and_calls_is_a_say_and_a_call_each(home: TempDir) {
             .collect::<Vec<_>>(),
         [Some(StopReason::EndTurn)]
     );
+}
+
+/// A call with no result yet (the session's tip) is written as one that ran.
+#[rstest]
+#[tokio::test]
+async fn a_call_with_no_result_is_completed(home: TempDir) {
+    let messages = vec![
+        row("u1", Role::User, vec![Content::Text("run it".to_owned())]),
+        row("a1", Role::Assistant, vec![call("call_1", "bash", json!({"command": "ls"}))]),
+    ];
+    let path = rehydrate_into(home.path(), &restore(home.path(), messages)).unwrap();
+    let calls: Vec<Value> = lines_of(&path)
+        .into_iter()
+        .filter(|l| l["payload"]["type"] == "tool_call")
+        .map(|l| l["payload"]["status"].clone())
+        .collect();
+    assert_eq!(calls, [json!(CALL_STATUS)]);
 }
 
 /// A compaction's summary covers the log before it: a tombstone from the log's first row, then
