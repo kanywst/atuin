@@ -68,7 +68,10 @@
 //!   session in the profile its header names, whatever `--agent` says, and a profile not the
 //!   user's asks approval for every write and command.
 //! - **Rows with nothing to write** (a reader's title rows, attachments) are skipped: the title
-//!   is the header's, which Kiro keeps.
+//!   is the header's, which Kiro keeps. A reader counts title rows from its read's first line, so
+//!   the copy of a session renamed before would name its title under a row of its own; the
+//!   header records the last title row under `_meta.kiro.atuin.title` (`{text, row}`), and the
+//!   reader names the copy's first title row so while the title is still that text.
 //!
 //! A [fork](crate::harnesstools::fork) names the session it was forked from in its header, as
 //! Kiro's own rewinds and tangents do (`parentSessionId`, `forkedAtMessageId`: the row it was
@@ -90,12 +93,13 @@ use time::macros::format_description;
 use uuid::Uuid;
 
 use super::kiro_home;
-use super::session::{HEADER_FILE, LOG_FILE, locate};
+use super::session::{ATUIN_META, HEADER_FILE, LOG_FILE, TitleRecord, locate};
 use crate::harnesstools::rehydrate::{
     RehydrateError, RehydrateMessage, RehydrateSession, UNCAPTURED_OUTPUT, merge_uncaptured_runs,
     record_merged,
 };
 use crate::harnesstools::resume;
+use crate::harnesstools::session::synthetic::SYNTHETIC;
 use crate::harnesstools::session::{Content, Role, StopReason, ToolCallId, ToolResult, ToolUse};
 use crate::path::PathBufExt as _;
 
@@ -231,14 +235,35 @@ pub(crate) fn header(session: &RehydrateSession, agent: &str) -> String {
         "modelId": session.model.as_deref().unwrap_or("auto"),
         "status": "idle",
     });
+    let mut atuin = serde_json::Map::new();
     if let Some(of) = &session.fork_of {
         header["parentSessionId"] = json!(of.id);
         if let Some(tip) = session.messages.last() {
             header["forkedAtMessageId"] = json!(tip.source_id);
         }
-        header["_meta"] = json!({"kiro": {"atuin": {"forkedFrom": of.id, "atuinId": of.atuin_id}}});
+        atuin.insert("forkedFrom".to_owned(), json!(of.id));
+        atuin.insert("atuinId".to_owned(), json!(of.atuin_id));
+    }
+    if let Some(title) = title_record(session) {
+        atuin.insert("title".to_owned(), json!({"text": title.text, "row": title.row}));
+    }
+    if !atuin.is_empty() {
+        let [meta, kiro, key] = ATUIN_META;
+        header[meta][kiro][key] = Value::Object(atuin);
     }
     serde_json::to_string_pretty(&header).unwrap_or_default()
+}
+
+/// The session's title and the row a reader last named it under (a title row, which the log
+/// has no row for), for the reader of the copy to name it under the same row.
+fn title_record(session: &RehydrateSession) -> Option<TitleRecord> {
+    let text = session.title.as_deref().map(str::trim).filter(|t| !t.is_empty())?;
+    let prefix = format!("{SYNTHETIC}title-");
+    let row = session.messages.iter().rev().find(|m| m.source_id.starts_with(&prefix))?;
+    Some(TitleRecord {
+        text: text.to_owned(),
+        row: row.source_id.clone(),
+    })
 }
 
 /// The whole log: one line per written row, the turns framed.

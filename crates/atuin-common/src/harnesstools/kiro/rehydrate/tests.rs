@@ -295,6 +295,59 @@ async fn a_title_reads_back_as_it_was_written(home: TempDir) {
     assert_eq!(titles, [TitleChange::new(TitleSource::Generated, title)]);
 }
 
+/// A session renamed A then B was read under a title row for each; its copy, whose read counts
+/// title rows from its own first line, names B under the original's row for it, so sync finds no
+/// new title row. A rename of the copy is a row of its own.
+#[rstest]
+#[tokio::test]
+async fn a_restored_title_reads_back_under_its_original_row(home: TempDir) {
+    let header: Value = serde_json::from_str(RESUMED_HEADER).unwrap();
+    let titled = |to: &str| {
+        let mut header = header.clone();
+        header["title"] = json!(to);
+        header.to_string()
+    };
+    let mut messages = captured(RESUMED, &titled("A")).await;
+    let a = messages.iter().find(|m| m.source_id.starts_with("syn-title-")).unwrap().clone();
+    // The row the original's read named B under, the second title row of that read.
+    let b = RehydrateMessage {
+        source_id: "syn-title-00000000000000bb".to_owned(),
+        ..a.clone()
+    };
+    messages.push(b.clone());
+    let session = RehydrateSession {
+        title: Some("B".to_owned()),
+        ..restore(home.path(), messages)
+    };
+    let path = rehydrate_into(home.path(), &session).unwrap();
+    let written: Value =
+        serde_json::from_str(&std::fs::read_to_string(path.with_file_name(HEADER_FILE)).unwrap())
+            .unwrap();
+    assert_eq!(
+        written["_meta"]["kiro"]["atuin"]["title"],
+        json!({"text": "B", "row": b.source_id})
+    );
+
+    let title_ids = |read: &[KiroMessage]| {
+        read.iter()
+            .filter(|m| m.title().is_some())
+            .map(|m| m.id().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+    let read = read_back(ID, &path).await;
+    assert_eq!(title_ids(&read), std::slice::from_ref(&b.source_id));
+
+    // Renamed, Kiro keeps `_meta.kiro.atuin` as written.
+    let mut renamed = written.clone();
+    renamed["title"] = json!("C");
+    renamed["titleSetByUser"] = json!(true);
+    std::fs::write(path.with_file_name(HEADER_FILE), renamed.to_string()).unwrap();
+    let read = read_back(ID, &path).await;
+    let ids = title_ids(&read);
+    assert_eq!(ids.len(), 1);
+    assert!(![&a.source_id, &b.source_id].contains(&&ids[0]), "{ids:?}");
+}
+
 #[rstest]
 #[tokio::test]
 async fn a_session_already_there_is_not_written_over(home: TempDir) {
