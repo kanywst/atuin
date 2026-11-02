@@ -100,6 +100,42 @@ async fn a_trailing_reasoning_marker_is_a_twig(#[case] harness: HarnessKind, #[c
     assert_eq!(summary(&step), want);
 }
 
+/// Kiro reads its log in order, so a twig holding anything but reasoning markers (here a call and
+/// its result, left by a turn cut off before its reply) would stay in the model's context under
+/// the other branch's rows: that is a divergence, not a fast-forward. An agent whose rows name the
+/// row before them never sees the twig again.
+#[rstest]
+#[case::kiro(HarnessKind::Kiro, "Diverged")]
+#[case::linked(HarnessKind::ClaudeCode, "ff:c,d@b")]
+#[tokio::test]
+async fn a_twig_kiro_would_still_read_is_a_divergence(
+    #[case] harness: HarnessKind,
+    #[case] want: &str,
+) {
+    use atuin_common::harnesstools::session::{ToolCallId, ToolResult, ToolUse};
+
+    let mut rows = rows(false);
+    let mut call = synced_row(&handle(), ("t", Some("b"), 1, 1, false));
+    call.role = Role::Assistant;
+    call.content = vec![Content::ToolUse(ToolUse {
+        id: ToolCallId::from("call".to_owned()),
+        name: "execute_bash".to_owned(),
+        input: serde_json::json!({"command": "ls"}),
+    })];
+    let mut result = synced_row(&handle(), ("u", Some("t"), 1, 2, false));
+    result.role = Role::Tool;
+    result.content = vec![Content::ToolResult(ToolResult {
+        call: ToolCallId::from("call".to_owned()),
+        output: serde_json::json!("Output:\nREADME.md\n\n\nExit Code: 0"),
+        error: false,
+    })];
+    rows.extend([call, result]);
+    let analysis = analysis(rows).await;
+    let head = SourceId::from("d".to_owned());
+    let step = classify(&analysis, harness, &head, &tip(&["a", "b", "t", "u"], Some("u")));
+    assert_eq!(summary(&step), want);
+}
+
 /// Each head is offered with what this copy lacks of it, and when it was last written.
 #[rstest]
 #[tokio::test]
