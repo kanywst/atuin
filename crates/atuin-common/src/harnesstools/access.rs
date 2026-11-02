@@ -144,6 +144,10 @@ impl Access {
                 | "patch"
                 | "create"
                 | "apply_diff"
+                // Kiro's: `fs_write` (`text`), `fs_append` and `str_replace` (`oldStr`, `newStr`).
+                | "fs_write"
+                | "fs_append"
+                | "str_replace"
         );
         if writes {
             access.writes = paths;
@@ -257,6 +261,9 @@ mod tests {
     #[case::grep("Grep", json!({"pattern": "x", "path": "/w"}), reads(&["/w"]))]
     #[case::claude_write("Write", json!({"file_path": "/w/.env", "content": "A=1"}), writes(&["/w/.env"]))]
     #[case::pi_edit("edit", json!({"path": "a.rs", "edits": []}), writes(&["a.rs"]))]
+    #[case::kiro_fs_write("fs_write", json!({"path": "/w/.env", "text": "A=1"}), writes(&["/w/.env"]))]
+    #[case::kiro_fs_append("fs_append", json!({"path": ".env", "text": "B=2"}), writes(&[".env"]))]
+    #[case::kiro_str_replace("str_replace", json!({"path": ".env", "oldStr": "A=1", "newStr": "A=2"}), writes(&[".env"]))]
     #[case::mcp_write("mcp__fs__write_file", json!({"path": "a.txt", "content": ""}), writes(&["a.txt"]))]
     #[case::patch_freeform("apply_patch", json!("*** Begin Patch\n*** Update File: .env\n@@\n-A=1\n+A=2\n*** End Patch"), writes(&[".env"]))]
     #[case::patch_object("apply_patch", json!({"input": "*** Begin Patch\n*** Add File: k.pem\n*** End Patch"}), writes(&["k.pem"]))]
