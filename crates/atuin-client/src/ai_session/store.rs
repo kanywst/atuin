@@ -134,19 +134,21 @@ impl AiSessionRecord {
     pub const VERSION: RecordVersion = RecordVersion::V2;
 
     /// The version this record is written as: [`Self::VERSION`], `v3` for a message naming `omp`
-    /// or carrying [`Message::provider`], or `v4` for a message naming `grok` (all sharing the
-    /// same compressed msgpack body). Older readers skip records of a known version they can't
-    /// decode for good, whereas a version they don't know yet they hold until upgraded.
+    /// or carrying [`Message::provider`], `v4` for one naming `grok`, or `v5` for one naming
+    /// `kiro` (all sharing the same compressed msgpack body). Older readers skip records of a
+    /// known version they can't decode for good, whereas a version they don't know yet they hold
+    /// until upgraded.
     #[must_use]
     pub fn version(&self) -> RecordVersion {
         match self {
             Self::Message(msg) => {
                 let harnesses = [Some(msg.session.harness), msg.parent.as_ref().map(|p| p.harness)];
-                if harnesses.into_iter().flatten().any(|h| h == HarnessKind::Grok) {
+                let names = |kind| harnesses.into_iter().flatten().any(|h| h == kind);
+                if names(HarnessKind::Kiro) {
+                    RecordVersion::V5
+                } else if names(HarnessKind::Grok) {
                     RecordVersion::V4
-                } else if harnesses.into_iter().flatten().any(|h| h == HarnessKind::Omp)
-                    || msg.provider.is_some()
-                {
+                } else if names(HarnessKind::Omp) || msg.provider.is_some() {
                     RecordVersion::V3
                 } else {
                     Self::VERSION
@@ -180,7 +182,7 @@ impl AiSessionRecord {
         match version {
             RecordVersion::V0 => Err(DecodeError::Retired(RecordVersion::V0)),
             RecordVersion::V1 => Ok(Self::Message(rmp_serde::from_slice(body)?)),
-            RecordVersion::V2 | RecordVersion::V3 | RecordVersion::V4 => {
+            RecordVersion::V2 | RecordVersion::V3 | RecordVersion::V4 | RecordVersion::V5 => {
                 let body = zstd::stream::decode_all(body).map_err(DecodeError::Decompress)?;
                 Ok(Self::Message(rmp_serde::from_slice(&body)?))
             }

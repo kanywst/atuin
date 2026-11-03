@@ -668,6 +668,8 @@ mod tests {
     #[case::with_a_provider(HarnessKind::Omp, None, Some("openai-codex"), RecordVersion::V3)]
     #[case::grok(HarnessKind::Grok, None, None, RecordVersion::V4)]
     #[case::continued_from_grok(HarnessKind::Pi, Some(HarnessKind::Grok), None, RecordVersion::V4)]
+    #[case::kiro(HarnessKind::Kiro, None, None, RecordVersion::V5)]
+    #[case::continued_from_kiro(HarnessKind::Pi, Some(HarnessKind::Kiro), None, RecordVersion::V5)]
     fn omp_messages_are_v3(
         #[case] harness: HarnessKind,
         #[case] parent: Option<HarnessKind>,
