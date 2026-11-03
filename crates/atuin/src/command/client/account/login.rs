@@ -199,6 +199,7 @@ impl Cmd {
             println!("{}", fl!("account-hub-open-url"));
         }
         println!("{}", session.auth_url);
+        println!("{}", fl!("account-hub-check-code", code = session.short_code()));
 
         let new_session = session
             .wait_for_completion(
